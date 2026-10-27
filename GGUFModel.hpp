@@ -1,7 +1,6 @@
 #pragma once
 
 #include "llama.h"
-#include "CharPointer.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -29,7 +28,7 @@ namespace pankey{
 			std::shared_ptr<llama_model>   m_model;
 			std::shared_ptr<llama_context> m_context;
 
-			void load(const pankey::Utility::Test::CharPointer& a_path){
+			void loadAbsolutePath(const std::string& a_path){
 
 				if(!s_backend_loaded){
 					ggml_backend_load_all();
@@ -39,7 +38,44 @@ namespace pankey{
 				unload();
 
 				std::filesystem::path i_model_path =
-					(std::filesystem::current_path() / a_path.get()).lexically_normal();
+					(std::filesystem::absolute(a_path)).lexically_normal();
+
+				if(!std::filesystem::exists(i_model_path)){
+					GGUFModelLog(0, "load", ("model not found: " + i_model_path.string()).c_str());
+					return;
+				}
+
+				llama_model_params i_model_params =
+					llama_model_default_params();
+
+				llama_model* i_model =
+					llama_model_load_from_file(
+						i_model_path.string().c_str(),
+						i_model_params
+					);
+
+				if(i_model == nullptr){
+					GGUFModelLog(0, "load", "failed to load model");
+					return;
+				}
+
+				m_model = std::shared_ptr<llama_model>(
+					i_model,
+					llama_model_free
+				);
+			}
+
+			void load(const std::string& a_path){
+
+				if(!s_backend_loaded){
+					ggml_backend_load_all();
+					s_backend_loaded = true;
+				}
+
+				unload();
+
+				std::filesystem::path i_model_path =
+					(std::filesystem::current_path() / a_path).lexically_normal();
 
 				if(!std::filesystem::exists(i_model_path)){
 					GGUFModelLog(0, "load", ("model not found: " + i_model_path.string()).c_str());

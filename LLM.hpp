@@ -75,8 +75,71 @@ namespace pankey{
 						llama_sampler_free
 					);
 				}
+				
+				void resetContext() {
+					if (!m_context) {
+						LLMLog(0, "resetContext", "context is not initialized");
+						return;
+					}
 
-				bool prompt(const pankey::Utility::Test::CharPointer& a_prompt){
+					// Clear the KV cache / sequence memory.
+					llama_memory_clear(
+						llama_get_memory(m_context.get()),
+						true
+					);
+
+					// Reset sampler state for the new inference.
+					if (m_sampler) {
+						llama_sampler_reset(m_sampler.get());
+					}
+				}
+
+				std::string getChatTemplate() const {
+					if (m_model.get() == nullptr) {
+						return std::string();
+					}
+
+					const char* tmpl = llama_model_chat_template(
+						m_model.get(),
+						nullptr
+					);
+
+					if (tmpl == nullptr) {
+						return std::string();
+					}
+
+					return std::string(tmpl);
+				}
+
+				std::string getMetaData() const {
+					std::string key = "tokenizer.chat_template";
+					std::string chatTemplate;
+
+					int32_t len = llama_model_meta_val_str(
+						m_model.get(),
+						key.c_str(),
+						nullptr,
+						0
+					);
+
+					std::cout << "Template length: " << len << '\n';
+
+					if (len > 0) {
+						std::vector<char> buffer(static_cast<size_t>(len) + 1, '\0');
+
+						llama_model_meta_val_str(
+							m_model.get(),
+							key.c_str(),
+							buffer.data(),
+							buffer.size()
+						);
+
+						chatTemplate = buffer.data();
+					}
+					return chatTemplate;
+				}
+
+				bool prompt(const std::string& a_prompt){
 
 					if(!m_context || !m_sampler){
 						LLMLog(0, "prompt", "context is not initialized");
@@ -88,8 +151,7 @@ namespace pankey{
 							m_model.get()
 						);
 
-					const std::string i_prompt =
-						a_prompt.get();
+					const std::string i_prompt = a_prompt;
 
 					const bool i_add_special = true;
 					const bool i_parse_special = true;
@@ -146,7 +208,7 @@ namespace pankey{
 					return true;
 				}
 
-				pankey::Utility::Test::CharPointer generate(size_t a_max_tokens = 128){
+				std::string generate(size_t a_max_tokens = 128){
 
 					if(!m_context || !m_sampler){
 						LLMLog(0, "generate", "context is not initialized");
@@ -215,7 +277,7 @@ namespace pankey{
 						}
 					}
 
-					return pankey::Utility::Test::CharPointer(i_response.c_str());
+					return std::move(i_response);
 				}
 
 				void unload(){
@@ -225,6 +287,7 @@ namespace pankey{
 					m_model.reset();
 				}
 			};
+			
 		}
 
 	}
